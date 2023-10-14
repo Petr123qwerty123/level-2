@@ -39,18 +39,15 @@ func merge(a, b <-chan int) <-chan int {
 }
 
 func main() {
-
 	a := asChan(1, 3, 5, 7)
-	b := asChan(2, 4 ,6, 8)
-	c := merge(a, b )
+	b := asChan(2, 4, 6, 8)
+	c := merge(a, b)
 	for v := range c {
 		fmt.Println(v)
 	}
 }
 ```
 
-Ответ:
-```
-...
+**Ответ:**
 
-```
+Вывод: числа от 1 до 8 в рандомном порядке и нули.
