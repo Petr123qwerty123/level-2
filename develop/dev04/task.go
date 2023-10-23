@@ -1,5 +1,10 @@
 package main
 
+import (
+	"sort"
+	"strings"
+)
+
 /*
 === Поиск анаграмм по словарю ===
 
@@ -19,6 +24,66 @@ package main
 Программа должна проходить все тесты. Код должен проходить проверки go vet и golint.
 */
 
-func main() {
+func ToLowerUnique(words []string) []string {
+	uniqueWords := make(map[string]bool)
 
+	result := make([]string, 0)
+
+	for _, word := range words {
+		lowerWord := strings.ToLower(word)
+
+		if !uniqueWords[lowerWord] {
+			uniqueWords[lowerWord] = true
+			result = append(result, lowerWord)
+		}
+	}
+
+	return result
+}
+
+func SortWord(word string) string {
+	wordArr := strings.Split(word, "")
+
+	sort.Strings(wordArr)
+
+	return strings.Join(wordArr, "")
+}
+
+func FindAnagramSets(words []string) map[string][]string {
+	anagramSets := make(map[string][]string)
+
+	keys := make(map[string]string)
+
+	for _, word := range words {
+		lowerWord := strings.ToLower(word)
+		sortedLowerWord := SortWord(lowerWord)
+
+		_, exists := keys[sortedLowerWord]
+		if !exists {
+			keys[sortedLowerWord] = word
+		}
+	}
+
+	words = ToLowerUnique(words)
+
+	for _, word := range words {
+		sortedWord := SortWord(word)
+
+		anagramSets[sortedWord] = append(anagramSets[sortedWord], word)
+	}
+
+	for key, value := range keys {
+		anagramSets[value] = anagramSets[key]
+		delete(anagramSets, key)
+	}
+
+	for sortedWord, wordSet := range anagramSets {
+		if len(wordSet) <= 1 {
+			delete(anagramSets, sortedWord)
+		} else {
+			sort.Strings(wordSet)
+		}
+	}
+
+	return anagramSets
 }

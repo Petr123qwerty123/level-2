@@ -1,5 +1,9 @@
 package main
 
+import (
+	"wb-level-2/develop/dev02/unpacker"
+)
+
 /*
 === Задача на распаковку ===
 
@@ -18,6 +22,12 @@ package main
 Функция должна проходить все тесты. Код должен проходить проверки go vet и golint.
 */
 
-func main() {
+func Unpack(s string) (string, error) {
+	ps, err := unpacker.NewPackedString(s)
 
+	if err != nil {
+		return "", err
+	}
+
+	return ps.Unpack(), nil
 }
