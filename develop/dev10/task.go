@@ -1,5 +1,17 @@
 package main
 
+import (
+	"flag"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+)
+
 /*
 === Утилита telnet ===
 
@@ -8,13 +20,136 @@ package main
 go-telnet --timeout=10s host port go-telnet mysite.ru 8080 go-telnet --timeout=3s 1.1.1.1 123
 
 Программа должна подключаться к указанному хосту (ip или доменное имя) и порту по протоколу TCP.
-После подключения STDIN программы должен записываться в сокет, а данные полученные и сокета должны выводиться в STDOUT
+После подключения STDIN программы должен записываться в сокет, а данные полученные из сокета должны выводиться в STDOUT
 Опционально в программу можно передать таймаут на подключение к серверу (через аргумент --timeout, по умолчанию 10s).
 
 При нажатии Ctrl+D программа должна закрывать сокет и завершаться. Если сокет закрывается со стороны сервера, программа должна также завершаться.
 При подключении к несуществующему сервер, программа должна завершаться через timeout.
 */
 
-func main() {
+const (
+	protocolType   = "tcp"
+	defaultTimeout = 10 * time.Second
+)
 
+type TelnetFlags struct {
+	timeout time.Duration
+}
+
+func (tf *TelnetFlags) Parse() {
+	flag.DurationVar(&tf.timeout, "timeout", defaultTimeout, "Specify timeout")
+
+	flag.Parse()
+}
+
+type TelnetArgs struct {
+	host string
+	port string
+}
+
+func (ta *TelnetArgs) Parse() {
+	ta.host = flag.Arg(0)
+	ta.port = flag.Arg(1)
+}
+
+type TelnetClient struct {
+	conn    net.Conn
+	flags   TelnetFlags
+	args    TelnetArgs
+	stopSig chan os.Signal
+	sync.WaitGroup
+}
+
+func NewTelnetClient() *TelnetClient {
+	stopSig := make(chan os.Signal, 1)
+
+	tc := &TelnetClient{stopSig: stopSig}
+
+	tc.flags.Parse()
+	tc.args.Parse()
+
+	return tc
+}
+
+func (tc *TelnetClient) Connect() error {
+	address := tc.args.host + ":" + tc.args.port
+
+	conn, err := net.DialTimeout(protocolType, address, tc.flags.timeout)
+
+	tc.conn = conn
+
+	return err
+}
+
+func (tc *TelnetClient) receiveMessages() {
+	defer tc.Done()
+
+	_, err := io.Copy(os.Stdout, tc.conn)
+	if err != nil {
+		tc.stopSig <- os.Kill
+	}
+}
+
+func (tc *TelnetClient) sendMessages() {
+	defer tc.Done()
+
+	_, err := io.Copy(tc.conn, os.Stdin)
+	if err != nil {
+		tc.stopSig <- os.Kill
+	}
+}
+
+func (tc *TelnetClient) Start() error {
+	err := tc.Connect()
+	if err != nil {
+		return err
+	}
+
+	tc.Add(2)
+
+	go tc.receiveMessages()
+
+	go tc.sendMessages()
+
+	return err
+}
+
+func (tc *TelnetClient) Stop() error {
+	defer tc.Wait()
+
+	err := tc.conn.Close()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func main() {
+	var err error
+
+	telnet := NewTelnetClient()
+
+	err = telnet.Start()
+	if err != nil {
+		fmt.Printf("%q\n", err)
+		os.Exit(1)
+	}
+
+	signal.Notify(telnet.stopSig, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+
+	select {
+	case <-telnet.stopSig:
+		close(telnet.stopSig)
+
+		err := telnet.Stop()
+		if err != nil {
+			fmt.Printf("%q\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("Получен сигнал завершения программы")
+		os.Exit(0)
+	}
 }
