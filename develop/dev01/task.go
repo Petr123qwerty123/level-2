@@ -1,5 +1,10 @@
 package main
 
+import (
+	"github.com/beevik/ntp"
+	"time"
+)
+
 /*
 === Базовая задача ===
 
@@ -12,6 +17,10 @@ package main
 Программа должна проходить проверки go vet и golint.
 */
 
-func main() {
+func PrintCurrentTime() (time.Time, error) {
+	response, err := ntp.Query("0.ru.pool.ntp.org")
 
+	ntpTime := response.Time.Add(response.MinError)
+
+	return ntpTime, err
 }
