@@ -7,15 +7,16 @@ import (
 	"strings"
 )
 
-type Unpacker interface {
-	Unpack() string
-}
-
+// PackedChar структура запакованного символа, где ch - символ, nr (number of repetitions) - количество повторений
+// символа от 0 до 9
 type PackedChar struct {
 	ch rune
 	nr int // nr [0, 9]
 }
 
+// NewPackedChar конструктор PackedChar
+// возвращает объект структуры PackedChar в случае, если количество повторений - цифра (число от 0 до 9),
+// в ином случае - ошибку
 func NewPackedChar(ch rune, nr int) (*PackedChar, error) {
 	if nr < 0 || nr > 9 {
 		return nil, fmt.Errorf("invalid repetition number: %d", nr)
@@ -24,12 +25,17 @@ func NewPackedChar(ch rune, nr int) (*PackedChar, error) {
 	return &PackedChar{ch: ch, nr: nr}, nil
 }
 
+// Unpack распаковывает символ (возвращает строку, где ch повторяется nr раз)
 func (pc PackedChar) Unpack() string {
 	return strings.Repeat(string(pc.ch), pc.nr)
 }
 
+// PackedString - тип запакованной строки (слайс запакованных символов)
 type PackedString []PackedChar
 
+// NewPackedString конструктор PackedString
+// на вход принимает строку s, которая будет проверена на правильность формата. В случае правильного формата вернется
+// объект PackedString, в ином - ошибка
 func NewPackedString(s string) (*PackedString, error) {
 	var packedString PackedString
 
@@ -73,6 +79,7 @@ func NewPackedString(s string) (*PackedString, error) {
 	return &packedString, nil
 }
 
+// Unpack распаковывает строку (возвращает строку, где каждый запакованный символ будет распакован)
 func (ps PackedString) Unpack() string {
 	var builder strings.Builder
 
