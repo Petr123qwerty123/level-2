@@ -24,14 +24,22 @@ import (
 Программа должна проходить все тесты. Код должен проходить проверки go vet и golint.
 */
 
+// ToLowerUnique принимает на вход слайс строк, возвращает слайс уникальных строк в нижнем регистре
 func ToLowerUnique(words []string) []string {
+	// создаем мапу для проверки уникальности, в качестве ключа строку в нижнем регистре, в значение true - если такое
+	// значение уже есть в result, false - если такого значения нет в result
 	uniqueWords := make(map[string]bool)
 
+	// создаем слайс для записи результата
 	result := make([]string, 0)
 
+	// циклом проходимся по слайсу строк
 	for _, word := range words {
+		// находим значение каждого элемента слайса (строку) в нижнем регистре
 		lowerWord := strings.ToLower(word)
 
+		// если в ключах нет значение строки в нижнем регистре, устанавливаем значение в true и добавляем эту строку к
+		// result
 		if !uniqueWords[lowerWord] {
 			uniqueWords[lowerWord] = true
 			result = append(result, lowerWord)
@@ -41,19 +49,28 @@ func ToLowerUnique(words []string) []string {
 	return result
 }
 
+// SortWord принимает на вход строку, возвращает строку, отсортированную по символам
 func SortWord(word string) string {
+	// разделяем посимвольно строку, получаем слайс символов строки
 	wordArr := strings.Split(word, "")
-
+	// сортируем слайс символов
 	sort.Strings(wordArr)
-
+	// соединям в новом порядке символы в строку
 	return strings.Join(wordArr, "")
 }
 
+// FindAnagramSets принимает на вход слайс строк, возвращает мапу, где в качестве ключей первое встретившееся в слайсе
+// слово, в значении слайс уникальных строк в нижнем регистре, которые являются анаграммой ключа, количество элементов
+// которого больше 1
 func FindAnagramSets(words []string) map[string][]string {
+	// мапа для нахождения анаграмм
 	anagramSets := make(map[string][]string)
-
+	// мапа для переименовывания ключей из отсортированных символов в первое встретившееся в слайсе строк
 	keys := make(map[string]string)
 
+	// проходимся циклом по слайсу строк, каждую строку переводим в нижний регистр и сортируем посимвольно, в ключ keys
+	// записываем слово, отсортированное посимвольно в нижнем регистре, а в значение - первое встретившееся слово в
+	// words
 	for _, word := range words {
 		lowerWord := strings.ToLower(word)
 		sortedLowerWord := SortWord(lowerWord)
@@ -64,19 +81,24 @@ func FindAnagramSets(words []string) map[string][]string {
 		}
 	}
 
+	// меняем значение words на слайс из уникальных слов из words в нижнем регистре
 	words = ToLowerUnique(words)
 
+	// проходимся циклом по words, ищем анаграмы, записываем их в мапу, где ключи - слова, отсортированные посимвольно
+	// в нижнем регистре
 	for _, word := range words {
 		sortedWord := SortWord(word)
 
 		anagramSets[sortedWord] = append(anagramSets[sortedWord], word)
 	}
 
+	// меняем ключи мапы с отсортированных посимвольно слов на первые встретившееся
 	for key, value := range keys {
 		anagramSets[value] = anagramSets[key]
 		delete(anagramSets, key)
 	}
 
+	// убираем пары ключ-значение, где в значении слайс длинной небольше 1, иначе сортируем его
 	for sortedWord, wordSet := range anagramSets {
 		if len(wordSet) <= 1 {
 			delete(anagramSets, sortedWord)
