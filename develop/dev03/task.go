@@ -41,6 +41,9 @@ import (
 
 var errParse = errors.New("parse error")
 
+// IntSlice тип для задания слайса по списку точек и отрезков. Точка - целое число, отрезок - множество целых чисел,
+// находящееся между крайними точками отрезка, включая сами крайние точки. Перечисление элементов (точек и отрезков)
+// осуществляется с помощью запятой
 type IntSlice []int
 
 func (is *IntSlice) MarshalText() ([]byte, error) {
@@ -88,10 +91,12 @@ func (is *IntSlice) UnmarshalText(b []byte) error {
 	}
 
 	s.Ints(*is)
+	*is = slices.Compact(*is)
 
 	return nil
 }
 
+// SortFlags структура, определяющюая опции утилиты Sort
 type SortFlags struct {
 	columns       IntSlice
 	numeric       bool
@@ -103,6 +108,7 @@ type SortFlags struct {
 	numericSuffix bool
 }
 
+// Parse метод для распарсивания и сохранения значений флагов опций в поля структуры SortFlags
 func (sf *SortFlags) Parse() {
 	flag.TextVar(&sf.columns, "k", &sf.columns, "Specify columns for sorting")
 	flag.BoolVar(&sf.numeric, "n", false, "Sort by numeric value")
@@ -116,10 +122,12 @@ func (sf *SortFlags) Parse() {
 	flag.Parse()
 }
 
+// SortArgs структура, определяющая аргументы запуска утилиты Sort
 type SortArgs struct {
 	inputFiles []*os.File
 }
 
+// Parse метод для распарсивания и сохранения значений аргументов запуска утилиты Sort в поля структуры SortArgs
 func (sa *SortArgs) Parse() error {
 	args := flag.Args()
 	nArg := flag.NArg()
@@ -141,21 +149,26 @@ func (sa *SortArgs) Parse() error {
 	return nil
 }
 
+// SortClient структура для управления утилитой Sort
 type SortClient struct {
 	flags SortFlags
 	args  SortArgs
 	data  []string
 }
 
+// NewSortClient конструктор для создания объекта структуры SortClient
 func NewSortClient() (*SortClient, error) {
+	// создание пустого объекта структуры SortClient
 	sc := &SortClient{}
 
+	// парс флагов и аргументов запуска утилиты
 	sc.flags.Parse()
 	err := sc.args.Parse()
 	if err != nil {
 		return nil, err
 	}
 
+	// чтение и сохранение данных для сортировки в поле data структуры SortClient, закрытие reader'ов
 	for _, inputFile := range sc.args.inputFiles {
 		partData, err := utils.ReadData(inputFile)
 		if err != nil {
@@ -174,12 +187,17 @@ func NewSortClient() (*SortClient, error) {
 	return sc, nil
 }
 
+// Sort метод для функционирования утилиты, который возвращает отсортированные данные, исхдодя из установленных опций
+// при запуске утилиты, в случае отсутствия ошибок
 func (sc *SortClient) Sort() ([]string, error) {
+	// создание копии слайса данных для сортировки, переданных в утилиту
 	result := make([]string, len(sc.data), cap(sc.data))
 
 	copy(result, sc.data)
 
+	// сортировка копии данных
 	slices.SortFunc(result, func(line1, line2 string) int {
+		// учитывание опции -k
 		if len(sc.flags.columns) > 0 {
 			fields1 := strings.Fields(line1)
 			fields2 := strings.Fields(line2)
@@ -201,11 +219,13 @@ func (sc *SortClient) Sort() ([]string, error) {
 			line2 = builder2.String()
 		}
 
+		// учитывание опции -b
 		if sc.flags.ignoreSpaces {
 			line1 = utils.TrimLeadingSpaces(line1)
 			line2 = utils.TrimLeadingSpaces(line2)
 		}
 
+		// учитывание опций -n, -h
 		if sc.flags.numeric || sc.flags.numericSuffix {
 			num1, err1 := utils.ParseNumericValue(line1, sc.flags.numericSuffix)
 			num2, err2 := utils.ParseNumericValue(line2, sc.flags.numericSuffix)
@@ -217,6 +237,7 @@ func (sc *SortClient) Sort() ([]string, error) {
 			return cmp.Compare(num1, num2)
 		}
 
+		// учитывание опции -M
 		if sc.flags.month {
 			indMonth1, err1 := utils.ParseMonth(line1)
 			indMonth2, err2 := utils.ParseMonth(line2)
@@ -231,10 +252,12 @@ func (sc *SortClient) Sort() ([]string, error) {
 		return cmp.Compare(line1, line2)
 	})
 
+	// учитывание опции -u
 	if sc.flags.unique {
 		result = utils.RemoveDuplicates(result)
 	}
 
+	// учитвание опции -r
 	if sc.flags.reverse {
 		slices.Reverse(result)
 	}
@@ -242,6 +265,8 @@ func (sc *SortClient) Sort() ([]string, error) {
 	return result, nil
 }
 
+// IsSorted метод возвращающий -1 в случае, если переданные данные были отсортированы в соответсвии с переданными
+// опцииями, индекс строки, которая нарушает сортировку в соответсвии с переданными опцииями, или ошибку
 func (sc *SortClient) IsSorted() (int, error) {
 	sortedData, err := sc.Sort()
 	if err != nil {
@@ -259,7 +284,9 @@ func (sc *SortClient) IsSorted() (int, error) {
 	return -1, nil
 }
 
+// Start метод запуска утилиты
 func (sc *SortClient) Start() error {
+	// учитывание опции -c
 	if sc.flags.checkSorted {
 		outputData, err := sc.IsSorted()
 		err = utils.WriteData(os.Stdout, outputData)
@@ -281,12 +308,14 @@ func main() {
 	var sortClient *SortClient
 	var err error
 
+	// создание объекта структуры SortClient, в случае ошибки - её вывод и выход из программы с кодом ошибки 1
 	sortClient, err = NewSortClient()
 	if err != nil {
 		fmt.Printf("%q\n", err)
 		os.Exit(1)
 	}
 
+	// запуск утилиты, в случае - её вывод и выход из программы с кодом ошибки 1
 	err = sortClient.Start()
 	if err != nil {
 		fmt.Printf("%q\n", err)
