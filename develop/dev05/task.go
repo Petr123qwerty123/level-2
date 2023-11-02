@@ -262,6 +262,7 @@ func (gc *GrepClient) Count() (int, error) {
 	return lenSearchResult, nil
 }
 
+// Start метод запуска утилиты
 func (gc *GrepClient) Start() error {
 	// учитывание опции -c
 	// в вывод идут не сами найденные строки, а количество таких строк
