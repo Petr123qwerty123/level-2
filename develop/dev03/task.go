@@ -46,10 +46,12 @@ var errParse = errors.New("parse error")
 // осуществляется с помощью запятой
 type IntSlice []int
 
+// MarshalText метод для сериализации слайса целых чисел
 func (is *IntSlice) MarshalText() ([]byte, error) {
 	return json.Marshal(*is)
 }
 
+// UnmarshalText метод для десериализации в слайс целых чисел
 func (is *IntSlice) UnmarshalText(b []byte) error {
 	if len(b) == 0 {
 		return nil
@@ -122,16 +124,20 @@ func (sf *SortFlags) Parse() {
 	flag.Parse()
 }
 
-// SortArgs структура, определяющая аргументы запуска утилиты Sort
+// SortArgs структура, определяющая неименованные аргументы запуска утилиты Sort
 type SortArgs struct {
 	inputFiles []*os.File
 }
 
-// Parse метод для распарсивания и сохранения значений аргументов запуска утилиты Sort в поля структуры SortArgs
+// Parse метод для распарсивания и сохранения значений неименованных аргументов запуска утилиты Sort в поля структуры
+// SortArgs
 func (sa *SortArgs) Parse() error {
 	args := flag.Args()
 	nArg := flag.NArg()
 
+	// если количество неименованных аргументов (источник данных для сортировки) - 0, то добавляем в источник os.Stdin,
+	// иначе воспринимаем введенные агрументы как пути до файлов, с которых нужно будет считывать данные, открываем их
+	// и кладем объекты *os.File в inputFiles
 	switch nArg {
 	case 0:
 		sa.inputFiles = append(sa.inputFiles, os.Stdin)
@@ -187,9 +193,9 @@ func NewSortClient() (*SortClient, error) {
 	return sc, nil
 }
 
-// Sort метод для функционирования утилиты, который возвращает отсортированные данные, исхдодя из установленных опций
+// Sort метод для функционирования утилиты, который возвращает отсортированные данные, исходя из установленных опций
 // при запуске утилиты, в случае отсутствия ошибок
-func (sc *SortClient) Sort() ([]string, error) {
+func (sc *SortClient) Sort() []string {
 	// создание копии слайса данных для сортировки, переданных в утилиту
 	result := make([]string, len(sc.data), cap(sc.data))
 
@@ -262,40 +268,37 @@ func (sc *SortClient) Sort() ([]string, error) {
 		slices.Reverse(result)
 	}
 
-	return result, nil
+	return result
 }
 
 // IsSorted метод возвращающий -1 в случае, если переданные данные были отсортированы в соответсвии с переданными
 // опцииями, индекс строки, которая нарушает сортировку в соответсвии с переданными опцииями, или ошибку
-func (sc *SortClient) IsSorted() (int, error) {
-	sortedData, err := sc.Sort()
-	if err != nil {
-		return -1, err
-	}
+func (sc *SortClient) IsSorted() int {
+	sortedData := sc.Sort()
 
 	high := min(len(sortedData), len(sc.data))
 
 	for i := 0; i < high; i++ {
 		if sc.data[i] != sortedData[i] {
-			return i, nil
+			return i
 		}
 	}
 
-	return -1, nil
+	return -1
 }
 
 // Start метод запуска утилиты
 func (sc *SortClient) Start() error {
 	// учитывание опции -c
 	if sc.flags.checkSorted {
-		outputData, err := sc.IsSorted()
-		err = utils.WriteData(os.Stdout, outputData)
+		outputData := sc.IsSorted()
+		err := utils.WriteData(os.Stdout, outputData)
 		if err != nil {
 			return err
 		}
 	} else {
-		outputData, err := sc.Sort()
-		err = utils.WriteData(os.Stdout, outputData...)
+		outputData := sc.Sort()
+		err := utils.WriteData(os.Stdout, outputData...)
 		if err != nil {
 			return err
 		}
