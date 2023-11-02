@@ -27,12 +27,17 @@ import (
 
 var errParse = errors.New("parse error")
 
+// IntSlice тип для задания слайса по списку точек и отрезков. Точка - целое число, отрезок - множество целых чисел,
+// находящееся между крайними точками отрезка, включая сами крайние точки. Перечисление элементов (точек и отрезков)
+// осуществляется с помощью запятой
 type IntSlice []int
 
+// MarshalText метод для сериализации слайса целых чисел
 func (is *IntSlice) MarshalText() ([]byte, error) {
 	return json.Marshal(*is)
 }
 
+// UnmarshalText метод для десериализации в слайс целых чисел
 func (is *IntSlice) UnmarshalText(b []byte) error {
 	if len(b) == 0 {
 		return nil
@@ -78,12 +83,14 @@ func (is *IntSlice) UnmarshalText(b []byte) error {
 	return nil
 }
 
+// CutFlags структура, определяющюая опции утилиты Cut
 type CutFlags struct {
 	fields    IntSlice
 	delimiter string
 	separated bool
 }
 
+// Parse метод для распарсивания и сохранения значений флагов опций в поля структуры CutFlags
 func (cf *CutFlags) Parse() {
 	flag.TextVar(&cf.fields, "f", &cf.fields, "Specify fields for cutting")
 	flag.StringVar(&cf.delimiter, "d", "\t", "Specify another delimiter")
@@ -92,14 +99,20 @@ func (cf *CutFlags) Parse() {
 	flag.Parse()
 }
 
+// CutArgs структура, определяющая неименованные аргументы запуска утилиты Cut
 type CutArgs struct {
 	inputFiles []*os.File
 }
 
+// Parse метод для распарсивания и сохранения значений неименованных аргументов запуска утилиты Cut в поля структуры
+// CutArgs
 func (ca *CutArgs) Parse() error {
 	args := flag.Args()
 	nArg := flag.NArg()
 
+	// если количество неименованных аргументов (источник данных для сортировки) - 0, то добавляем в источник os.Stdin,
+	// иначе воспринимаем введенные агрументы как пути до файлов, с которых нужно будет считывать данные, открываем их
+	// и кладем объекты *os.File в inputFiles
 	switch nArg {
 	case 0:
 		ca.inputFiles = append(ca.inputFiles, os.Stdin)
@@ -117,21 +130,26 @@ func (ca *CutArgs) Parse() error {
 	return nil
 }
 
+// CutClient структура для управления утилитой Cut
 type CutClient struct {
 	flags CutFlags
 	args  CutArgs
 	data  []string
 }
 
+// NewCutClient конструктор для создания объекта структуры CutClient
 func NewCutClient() (*CutClient, error) {
+	// создание пустого объекта структуры CutClient
 	cc := &CutClient{}
 
+	// парс флагов и аргументов запуска утилиты
 	cc.flags.Parse()
 	err := cc.args.Parse()
 	if err != nil {
 		return nil, err
 	}
 
+	// чтение и сохранение данных для сортировки в поле data структуры CutClient, закрытие reader'ов
 	for _, inputFile := range cc.args.inputFiles {
 		partData, err := utils.ReadData(inputFile)
 		if err != nil {
@@ -150,19 +168,30 @@ func NewCutClient() (*CutClient, error) {
 	return cc, nil
 }
 
-func (cc *CutClient) Cut() ([]string, error) {
+// Cut метод для функционирования утилиты, который возвращает вырезанные данные, исходя из установленных опций
+// при запуске утилиты, в случае отсутствия ошибок
+func (cc *CutClient) Cut() []string {
 	var result []string
 
+	// проходимся циклом по строкам данных для обработки
 	for _, line := range cc.data {
+		// делим строку на поля разделителем
 		fields := strings.Split(line, cc.flags.delimiter)
 
+		// в случае если стоит флаг -s, указывающий на использование только строк с разделителем, а при сплите строки
+		// разделителем мы получили слайс длиной один - это значит, что разделителя в строке нет, значит нам ничего
+		// обрабатывать и выводить эту строку не нужно, значит мы работаем при обратном условии
 		if !(cc.flags.separated && len(fields) == 1) {
 			var builder strings.Builder
 
+			// проходимся циклом по слайсу номеров колонок, которые вырезаются
 			for i, fieldNumber := range cc.flags.fields {
+				// переопределяем индекс итерации внутрии цикла
 				i := i
 
+				// если номер строки не выходит за границы слайса - обрабатываем
 				if fieldNumber >= 1 && fieldNumber <= len(fields) {
+					// если поле в строке не последнее, то записываем поле + разделитель, в ином случае просто поле
 					builder.WriteString(fields[fieldNumber-1])
 
 					if i != len(cc.flags.fields)-1 {
@@ -171,6 +200,7 @@ func (cc *CutClient) Cut() ([]string, error) {
 				}
 			}
 
+			// если был передан флаг -f, то склеиваем эти поля, если нет - в результат записываем всю строку
 			if len(cc.flags.fields) > 0 {
 				result = append(result, builder.String())
 			} else {
@@ -179,13 +209,14 @@ func (cc *CutClient) Cut() ([]string, error) {
 		}
 	}
 
-	return result, nil
+	return result
 }
 
+// Start метод запуска утилиты
 func (cc *CutClient) Start() error {
-	outputData, err := cc.Cut()
+	outputData := cc.Cut()
 
-	err = utils.WriteData(os.Stdout, outputData...)
+	err := utils.WriteData(os.Stdout, outputData...)
 	if err != nil {
 		return err
 	}
