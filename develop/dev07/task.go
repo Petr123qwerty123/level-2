@@ -39,22 +39,35 @@ start := time.Now()
 fmt.Printf(“done after %v”, time.Since(start))
 */
 
+/*Стоит сделать пометку о том, что задание сформулировано непонятно, поэтому функция реализована таким образом, что пока
+открыт хотя бы один канал - or тоже открыт*/
+
+// sig функция, реализация которой взята из условия к задаче
+// принимает на вход продолжительность работы возвращаемого канала (время, через которое возвращаемый канал закроется)
 func sig(after time.Duration) <-chan interface{} {
 	c := make(chan interface{})
+
 	go func() {
 		defer close(c)
 
 		time.Sleep(after)
 	}()
+
 	return c
 }
 
+// or принимает на вход слайс каналов любого типа в режиме чтения, возвращает канал, объединяющий потоки чтения из
+// каналов, переданных в функцию
 func or(channels ...<-chan interface{}) <-chan interface{} {
+	// создаем канал любого типа для объединения потоков чтения переданных в функцию каналов
 	done := make(chan interface{})
 
+	// определяем sync.WaitGroup для ожидания окончания работы всех воркеров, запущенных в цикле для передачи данных с
+	// переданных в функцию каналов в общий
 	wg := sync.WaitGroup{}
 	wg.Add(len(channels))
 
+	// запуск воркеров
 	for _, channel := range channels {
 		go func(channel <-chan interface{}, done chan interface{}, wg *sync.WaitGroup) {
 			defer wg.Done()
@@ -67,6 +80,7 @@ func or(channels ...<-chan interface{}) <-chan interface{} {
 		}(channel, done, &wg)
 	}
 
+	// запуск горутины, ожидающей, когда все воркеры остановятся, и закрывающий общий канал
 	go func(done chan interface{}, wg *sync.WaitGroup) {
 		wg.Wait()
 		close(done)
