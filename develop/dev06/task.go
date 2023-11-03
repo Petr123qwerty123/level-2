@@ -228,12 +228,14 @@ func main() {
 	var cutClient *CutClient
 	var err error
 
+	// создание объекта структуры CutClient, в случае ошибки - её вывод и выход из программы с кодом ошибки 1
 	cutClient, err = NewCutClient()
 	if err != nil {
 		fmt.Printf("%q\n", err)
 		os.Exit(1)
 	}
 
+	// запуск утилиты, в случае ошибки - её вывод и выход из программы с кодом ошибки 1
 	err = cutClient.Start()
 	if err != nil {
 		fmt.Printf("%q\n", err)
