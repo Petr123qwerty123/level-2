@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -32,26 +33,43 @@ const (
 	defaultTimeout = 10 * time.Second
 )
 
+var errNArgs = errors.New("invalid number of arguments")
+
+// TelnetFlags структура, определяющюая опции утилиты Telnet
 type TelnetFlags struct {
 	timeout time.Duration
 }
 
+// Parse метод для распарсивания и сохранения значений флагов опций в поля структуры TelnetFlags
 func (tf *TelnetFlags) Parse() {
 	flag.DurationVar(&tf.timeout, "timeout", defaultTimeout, "Specify timeout")
 
 	flag.Parse()
 }
 
+// TelnetArgs структура, определяющая неименованные аргументы запуска утилиты Telnet
 type TelnetArgs struct {
 	host string
 	port string
 }
 
-func (ta *TelnetArgs) Parse() {
-	ta.host = flag.Arg(0)
-	ta.port = flag.Arg(1)
+// Parse метод для распарсивания и сохранения значений неименованных аргументов запуска утилиты Telnet в поля структуры
+// TelnetArgs
+func (ta *TelnetArgs) Parse() error {
+	nArg := flag.NArg()
+
+	switch nArg {
+	case 2:
+		ta.host = flag.Arg(0)
+		ta.port = flag.Arg(1)
+	default:
+		return errNArgs
+	}
+
+	return nil
 }
 
+// TelnetClient структура для управления утилитой Telnet
 type TelnetClient struct {
 	conn    net.Conn
 	flags   TelnetFlags
@@ -60,27 +78,38 @@ type TelnetClient struct {
 	sync.WaitGroup
 }
 
-func NewTelnetClient() *TelnetClient {
+// NewTelnetClient конструктор для создания объекта структуры TelnetClient
+func NewTelnetClient() (*TelnetClient, error) {
+	// создаем канал, ожидающий сигнал о завершении работы утилиты
 	stopSig := make(chan os.Signal, 1)
 
 	tc := &TelnetClient{stopSig: stopSig}
 
 	tc.flags.Parse()
-	tc.args.Parse()
+	err := tc.args.Parse()
+	if err != nil {
+		return nil, err
+	}
 
-	return tc
+	return tc, nil
 }
 
+// Connect метод для подключения к tcp-серверу
 func (tc *TelnetClient) Connect() error {
 	address := tc.args.host + ":" + tc.args.port
 
 	conn, err := net.DialTimeout(protocolType, address, tc.flags.timeout)
+	if err != nil {
+		return err
+	}
 
 	tc.conn = conn
 
-	return err
+	return nil
 }
 
+// receiveMessages метод, который переносит поток данных из сокета в os.Stdout, в случае возникновения ошибки в канал,
+// ожидающий сигнала о завершении работы утилиты, передается os.Kill
 func (tc *TelnetClient) receiveMessages() {
 	defer tc.Done()
 
@@ -90,6 +119,8 @@ func (tc *TelnetClient) receiveMessages() {
 	}
 }
 
+// sendMessages метод, который переносит поток данных из os.Stdin в сокет, в случае возникновения ошибки в канал,
+// ожидающий сигнала о завершении работы утилиты, передается os.Kill
 func (tc *TelnetClient) sendMessages() {
 	defer tc.Done()
 
@@ -99,26 +130,35 @@ func (tc *TelnetClient) sendMessages() {
 	}
 }
 
+// Start метод запуска утилиты
 func (tc *TelnetClient) Start() error {
+	// подключаемся к tcp серверу, в случае возникновения ошибки закрываем канал, ожидающий сигнала о завершении работы
+	// утилиты, закрываем подключение к tcp-серверу
 	err := tc.Connect()
 	if err != nil {
+		close(tc.stopSig)
+		err = tc.conn.Close()
 		return err
 	}
 
 	tc.Add(2)
 
+	// запускаем горутины, связанные с передачей сообщений из os.Stdin в сокет, из сокета в os.Stdout
 	go tc.receiveMessages()
-
 	go tc.sendMessages()
 
-	return err
+	return nil
 }
 
+// Stop метод для остановки работы утилиты
+// дожидается завершения работы горутин, связанных с передачей сообщений из os.Stdin в сокет, из сокета в os.Stdout,
+// закрываем канал, ожидающий сигнала о завершении работы утилиты, закрываем подключение к tcp-серверу
 func (tc *TelnetClient) Stop() error {
 	defer tc.Wait()
 
-	err := tc.conn.Close()
+	close(tc.stopSig)
 
+	err := tc.conn.Close()
 	if err != nil {
 		return err
 	}
@@ -127,29 +167,32 @@ func (tc *TelnetClient) Stop() error {
 }
 
 func main() {
-	var err error
+	// создание объекта структуры TelnetClient
+	telnet, err := NewTelnetClient()
+	if err != nil {
+		fmt.Printf("%q\n", err)
+		os.Exit(1)
+	}
 
-	telnet := NewTelnetClient()
-
+	// запуск утилиты Telnet, в случае ошибки - её вывод и выход из программы с кодом ошибки 1
 	err = telnet.Start()
 	if err != nil {
 		fmt.Printf("%q\n", err)
 		os.Exit(1)
 	}
 
+	// отслеживание сигнала о завершении работы утилиты, полученного от пользователя и его запись в канал telnet.stopSig
 	signal.Notify(telnet.stopSig, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 
-	select {
-	case <-telnet.stopSig:
-		close(telnet.stopSig)
+	// ожидание получения сигнала о завершении работы утилиты, полученного от пользователя
+	<-telnet.stopSig
 
-		err := telnet.Stop()
-		if err != nil {
-			fmt.Printf("%q\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Println("Получен сигнал завершения программы")
-		os.Exit(0)
+	// остановка работы утилиты, в случае ошибки - её вывод и выход из программы с кодом ошибки 1
+	err = telnet.Stop()
+	if err != nil {
+		fmt.Printf("%q\n", err)
+		os.Exit(1)
 	}
+
+	fmt.Println("Получен сигнал завершения программы")
 }
