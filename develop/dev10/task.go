@@ -109,24 +109,28 @@ func (tc *TelnetClient) Connect() error {
 }
 
 // receiveMessages метод, который переносит поток данных из сокета в os.Stdout, в случае возникновения ошибки в канал,
-// ожидающий сигнала о завершении работы утилиты, передается os.Kill
+// ожидающий сигнала о завершении работы утилиты, передается os.Kill, если он не закрыт
 func (tc *TelnetClient) receiveMessages() {
 	defer tc.Done()
 
 	_, err := io.Copy(os.Stdout, tc.conn)
 	if err != nil {
-		tc.stopSig <- os.Kill
+		if _, ok := <-tc.stopSig; ok {
+			tc.stopSig <- os.Kill
+		}
 	}
 }
 
 // sendMessages метод, который переносит поток данных из os.Stdin в сокет, в случае возникновения ошибки в канал,
-// ожидающий сигнала о завершении работы утилиты, передается os.Kill
+// ожидающий сигнала о завершении работы утилиты, передается os.Kill, если он не закрыт
 func (tc *TelnetClient) sendMessages() {
 	defer tc.Done()
 
 	_, err := io.Copy(tc.conn, os.Stdin)
 	if err != nil {
-		tc.stopSig <- os.Kill
+		if _, ok := <-tc.stopSig; ok {
+			tc.stopSig <- os.Kill
+		}
 	}
 }
 
